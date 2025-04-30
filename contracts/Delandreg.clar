@@ -211,3 +211,64 @@
   )
 )
 
+(define-public (file-property-dispute 
+    (property-id uint)
+    (description (string-ascii 256))
+  )
+  (let (
+    (dispute-id (get-next-dispute-id property-id))
+    (existing-property (map-get? properties { property-id: property-id }))
+  )
+    (if (is-none existing-property)
+      err-not-found
+      (ok (map-set property-disputes
+        { property-id: property-id, dispute-id: dispute-id }
+        {
+          complainant: tx-sender,
+          description: description,
+          status: "pending",
+          filing-date: (get-block-height),
+          resolution-date: none
+        }
+      ))
+    )
+  )
+)
+
+;; Removed duplicate definition of get-next-dispute-id
+
+(define-private (get-last-dispute-id (property-id uint))
+  (let ((disputes (map-to-list property-disputes)))
+    (fold get-max-dispute-id disputes u0)
+  )
+)
+
+(define-private (get-max-dispute-id (dispute {property-id: uint, dispute-id: uint}) (max-id uint))
+  (if (> (get dispute-id dispute) max-id)
+    (get dispute-id dispute)
+    max-id
+  )
+)
+
+(define-public (resolve-property-dispute
+    (property-id uint)
+    (dispute-id uint)
+  )
+  (let (
+    (existing-dispute (map-get? property-disputes { property-id: property-id, dispute-id: dispute-id }))
+    (is-authorized-resolver (is-eq tx-sender contract-owner))
+  )
+    (if (or (is-none existing-dispute) (not is-authorized-resolver))
+      err-not-found
+      (ok (map-set property-disputes
+        { property-id: property-id, dispute-id: dispute-id }
+        (merge (unwrap-panic existing-dispute)
+          {
+            status: "resolved",
+            resolution-date: (some (get-block-height))
+          }
+        )
+      ))
+    )
+  )
+)
