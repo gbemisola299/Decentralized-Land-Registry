@@ -24,14 +24,3 @@
     verification-expiry: uint
   }
 )
-
-(define-map property-metadata
-  { property-id: uint }
-  {
-    dimensions: {length: uint, width: uint},
-    zone-type: (string-ascii 64),
-    facilities: (list 10 (string-ascii 64)),
-    last-inspection-date: uint
-  }
-)
-
