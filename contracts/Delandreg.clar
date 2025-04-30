@@ -1,15 +1,37 @@
+;; Decentralized Land Registry
 
-;; Delandreg
-;; <add a description here>
+;; Constants
+(define-constant contract-owner tx-sender)
+(define-constant err-owner-only (err u100))
+(define-constant err-not-found (err u101))
+(define-constant err-already-registered (err u102))
+(define-constant err-invalid-price (err u103))
+(define-constant err-insufficient-funds (err u104))
+(define-constant err-not-for-sale (err u105))
 
-;; constants
-;;
+(define-constant err-not-verified (err u106))
+(define-constant err-already-verified (err u107))
+(define-constant err-invalid-dimensions (err u108))
+(define-constant err-invalid-dates (err u109))
 
-;; data maps and vars
-;;
 
-;; private functions
-;;
+(define-map property-verification
+  { property-id: uint }
+  {
+    verified: bool,
+    verifier: principal,
+    verification-date: uint,
+    verification-expiry: uint
+  }
+)
 
-;; public functions
-;;
+(define-map property-metadata
+  { property-id: uint }
+  {
+    dimensions: {length: uint, width: uint},
+    zone-type: (string-ascii 64),
+    facilities: (list 10 (string-ascii 64)),
+    last-inspection-date: uint
+  }
+)
+
