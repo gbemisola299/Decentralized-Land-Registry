@@ -272,3 +272,81 @@
     )
   )
 )
+
+(define-public (add-property-metadata 
+    (property-id uint)
+    (length uint)
+    (width uint)
+    (zone-type (string-ascii 64))
+    (facilities (list 10 (string-ascii 64)))
+  )
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (is-eq tx-sender current-owner)
+          (if (and (> length u0) (> width u0))
+            (ok (map-set property-metadata
+              { property-id: property-id }
+              {
+                dimensions: {length: length, width: width},
+                zone-type: zone-type,
+                facilities: facilities,
+                last-inspection-date: (get-block-height)
+              }
+            ))
+            err-invalid-dimensions
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (accept-transfer (property-id uint))
+  (let ((transfer (map-get? property-transfers { property-id: property-id })))
+    (if (is-none transfer)
+      err-not-found
+      (let (
+        (transfer-data (unwrap-panic transfer))
+        (existing-property (unwrap-panic (map-get? properties { property-id: property-id })))
+        (history-index (default-to u0 (get-last-history-index property-id)))
+      )
+        (if (and 
+          (is-eq (get to transfer-data) tx-sender)
+          (is-eq (get status transfer-data) "pending")
+        )
+          (begin
+            ;; Update property ownership
+            (map-set properties
+              { property-id: property-id }
+              (merge existing-property
+                {
+                  owner: tx-sender,
+                  for-sale: false,
+                  price: u0
+                }
+              )
+            )
+            ;; Record in history
+            (map-set property-history
+              { property-id: property-id, index: (+ history-index u1) }
+              {
+                previous-owner: (get from transfer-data),
+                new-owner: tx-sender,
+                transfer-date: (get transfer-date transfer-data),
+                price: (get price transfer-data)
+              }
+            )
+            ;; Clean up transfer record
+            (map-delete property-transfers { property-id: property-id })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
