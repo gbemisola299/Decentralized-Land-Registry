@@ -24,3 +24,36 @@
     verification-expiry: uint
   }
 )
+
+(define-map property-disputes
+  { property-id: uint, dispute-id: uint }
+  {
+    complainant: principal,
+    description: (string-ascii 256),
+    status: (string-ascii 20),
+    filing-date: uint,
+    resolution-date: (optional uint)
+  }
+)
+
+(define-map properties
+  { property-id: uint }
+  {
+    owner: principal,
+    details: (string-ascii 256),
+    price: uint,
+    for-sale: bool,
+    registration-date: uint
+  }
+)
+
+(define-map property-transfers
+  { property-id: uint }
+  {
+    from: principal,
+    to: principal,
+    status: (string-ascii 7),
+    price: uint,
+    transfer-date: uint
+  }
+)
