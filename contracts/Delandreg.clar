@@ -272,3 +272,178 @@
     )
   )
 )
+
+(define-public (add-property-metadata 
+    (property-id uint)
+    (length uint)
+    (width uint)
+    (zone-type (string-ascii 64))
+    (facilities (list 10 (string-ascii 64)))
+  )
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (is-eq tx-sender current-owner)
+          (if (and (> length u0) (> width u0))
+            (ok (map-set property-metadata
+              { property-id: property-id }
+              {
+                dimensions: {length: length, width: width},
+                zone-type: zone-type,
+                facilities: facilities,
+                last-inspection-date: (get-block-height)
+              }
+            ))
+            err-invalid-dimensions
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (accept-transfer (property-id uint))
+  (let ((transfer (map-get? property-transfers { property-id: property-id })))
+    (if (is-none transfer)
+      err-not-found
+      (let (
+        (transfer-data (unwrap-panic transfer))
+        (existing-property (unwrap-panic (map-get? properties { property-id: property-id })))
+        (history-index (default-to u0 (get-last-history-index property-id)))
+      )
+        (if (and 
+          (is-eq (get to transfer-data) tx-sender)
+          (is-eq (get status transfer-data) "pending")
+        )
+          (begin
+            ;; Update property ownership
+            (map-set properties
+              { property-id: property-id }
+              (merge existing-property
+                {
+                  owner: tx-sender,
+                  for-sale: false,
+                  price: u0
+                }
+              )
+            )
+            ;; Record in history
+            (map-set property-history
+              { property-id: property-id, index: (+ history-index u1) }
+              {
+                previous-owner: (get from transfer-data),
+                new-owner: tx-sender,
+                transfer-date: (get transfer-date transfer-data),
+                price: (get price transfer-data)
+              }
+            )
+            ;; Clean up transfer record
+            (map-delete property-transfers { property-id: property-id })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (verify-property 
+    (property-id uint)
+    (verification-period uint)
+  )
+  (let (
+    (existing-verification (map-get? property-verification { property-id: property-id }))
+    (is-authorized-verifier (is-eq tx-sender contract-owner))
+  )
+    (if (not is-authorized-verifier)
+      err-owner-only
+      (if (and (is-some existing-verification) (get verified (unwrap-panic existing-verification)))
+        err-already-verified
+        (ok (map-set property-verification
+          { property-id: property-id }
+          {
+            verified: true,
+            verifier: tx-sender,
+            verification-date: (get-block-height),
+            verification-expiry: (+ (get-block-height) verification-period)
+          }
+        ))
+      )
+    )
+  )
+)
+
+;; Read-only Functions
+(define-read-only (get-property-details (property-id uint))
+  (map-get? properties { property-id: property-id })
+)
+
+(define-read-only (get-transfer-details (property-id uint))
+  (map-get? property-transfers { property-id: property-id })
+)
+
+(define-read-only (get-property-history (property-id uint) (index uint))
+  (map-get? property-history { property-id: property-id, index: index })
+)
+
+
+(define-read-only (get-last-history-index (property-id uint))
+  (let ((history (map-get? property-history { property-id: property-id, index: u0 })))
+    (if (is-none history)
+      u0
+      (fold check-next-index (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10) u0 property-id)
+    )
+  )
+)
+
+(define-private (check-next-index (index uint) (last-index uint) (property-id uint))
+  (let ((history (map-get? property-history { property-id: property-id, index: index })))
+    (if (is-some history)
+      index
+      last-index
+    )
+  )
+)
+
+(define-read-only (get-property-metadata (property-id uint))
+  (map-get? property-metadata { property-id: property-id })
+)
+
+(define-read-only (get-property-verification-status (property-id uint))
+  (map-get? property-verification { property-id: property-id })
+)
+
+(define-read-only (get-property-disputes (property-id uint) (dispute-id uint))
+  (map-get? property-disputes { property-id: property-id, dispute-id: dispute-id })
+)
+
+(define-read-only (is-property-verified (property-id uint))
+  (let ((verification (map-get? property-verification { property-id: property-id })))
+    (if (is-none verification)
+      false
+      (let ((verify-data (unwrap-panic verification)))
+        (and
+          (get verified verify-data)
+          (< (get-block-height) (get verification-expiry verify-data))
+        )
+      )
+    )
+  )
+)
+
+(define-private (get-next-dispute-id (property-id uint))
+  (let ((last-dispute (get-last-dispute property-id)))
+    (if (is-none last-dispute)
+      u1
+      (+ u1 (get dispute-id (unwrap-panic last-dispute)))
+    )
+  )
+)
+
+(define-private (get-last-dispute (property-id uint))
+  (map-get? property-disputes { property-id: property-id, dispute-id: u0 })
+)
+
