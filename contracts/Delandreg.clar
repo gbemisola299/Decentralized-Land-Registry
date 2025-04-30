@@ -24,3 +24,71 @@
     verification-expiry: uint
   }
 )
+
+(define-map property-disputes
+  { property-id: uint, dispute-id: uint }
+  {
+    complainant: principal,
+    description: (string-ascii 256),
+    status: (string-ascii 20),
+    filing-date: uint,
+    resolution-date: (optional uint)
+  }
+)
+
+(define-map properties
+  { property-id: uint }
+  {
+    owner: principal,
+    details: (string-ascii 256),
+    price: uint,
+    for-sale: bool,
+    registration-date: uint
+  }
+)
+
+(define-map property-transfers
+  { property-id: uint }
+  {
+    from: principal,
+    to: principal,
+    status: (string-ascii 7),
+    price: uint,
+    transfer-date: uint
+  }
+)
+
+(define-map property-history
+  { property-id: uint, index: uint }
+  {
+    previous-owner: principal,
+    new-owner: principal,
+    transfer-date: uint,
+    price: uint
+  }
+)
+
+;; Private Functions
+(define-private (get-block-height)
+  block-height
+)
+
+
+;; Public Functions
+(define-public (register-property (property-id uint) (details (string-ascii 256)))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-some existing-property)
+      err-already-registered
+      (ok (map-set properties 
+        { property-id: property-id } 
+        {
+          owner: tx-sender,
+          details: details,
+          price: u0,
+          for-sale: false,
+          registration-date: (get-block-height)
+        }
+      ))
+    )
+  )
+)
