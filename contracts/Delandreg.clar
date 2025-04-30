@@ -92,3 +92,70 @@
     )
   )
 )
+
+(define-public (transfer-property (property-id uint) (new-owner principal))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (is-eq tx-sender current-owner)
+          (begin
+            (map-set property-transfers { property-id: property-id } { from: tx-sender, to: new-owner, status: "pending", price: (get price (unwrap-panic (map-get? properties { property-id: property-id }))), transfer-date: (get-block-height) })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (accept-transfer (property-id uint))
+  (let ((transfer (map-get? property-transfers { property-id: property-id })))
+    (if (is-none transfer)
+      err-not-found
+      (let ((transfer-data (unwrap-panic transfer)))
+        (if (and (is-eq (get to transfer-data) tx-sender) (is-eq (get status transfer-data) "pending"))
+          (begin
+            (map-set properties 
+              { property-id: property-id } 
+              { 
+                owner: tx-sender, 
+                details: (get details (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                price: (get price (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                for-sale: (get for-sale (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                registration-date: (get registration-date (unwrap-panic (map-get? properties { property-id: property-id }))) 
+              }
+            )
+            (map-delete property-transfers { property-id: property-id })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (list-property-for-sale (property-id uint) (asking-price uint))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (and (is-eq tx-sender current-owner) (> asking-price u0))
+          (ok (map-set properties 
+            { property-id: property-id }
+            (merge (unwrap-panic existing-property)
+              {
+                price: asking-price,
+                for-sale: true
+              }
+            )
+          ))
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
