@@ -350,3 +350,51 @@
   )
 )
 
+(define-public (verify-property 
+    (property-id uint)
+    (verification-period uint)
+  )
+  (let (
+    (existing-verification (map-get? property-verification { property-id: property-id }))
+    (is-authorized-verifier (is-eq tx-sender contract-owner))
+  )
+    (if (not is-authorized-verifier)
+      err-owner-only
+      (if (and (is-some existing-verification) (get verified (unwrap-panic existing-verification)))
+        err-already-verified
+        (ok (map-set property-verification
+          { property-id: property-id }
+          {
+            verified: true,
+            verifier: tx-sender,
+            verification-date: (get-block-height),
+            verification-expiry: (+ (get-block-height) verification-period)
+          }
+        ))
+      )
+    )
+  )
+)
+
+;; Read-only Functions
+(define-read-only (get-property-details (property-id uint))
+  (map-get? properties { property-id: property-id })
+)
+
+(define-read-only (get-transfer-details (property-id uint))
+  (map-get? property-transfers { property-id: property-id })
+)
+
+(define-read-only (get-property-history (property-id uint) (index uint))
+  (map-get? property-history { property-id: property-id, index: index })
+)
+
+
+(define-read-only (get-last-history-index (property-id uint))
+  (let ((history (map-get? property-history { property-id: property-id, index: u0 })))
+    (if (is-none history)
+      u0
+      (fold check-next-index (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10) u0 property-id)
+    )
+  )
+)
