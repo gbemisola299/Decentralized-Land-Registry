@@ -92,3 +92,183 @@
     )
   )
 )
+
+(define-public (transfer-property (property-id uint) (new-owner principal))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (is-eq tx-sender current-owner)
+          (begin
+            (map-set property-transfers { property-id: property-id } { from: tx-sender, to: new-owner, status: "pending", price: (get price (unwrap-panic (map-get? properties { property-id: property-id }))), transfer-date: (get-block-height) })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (accept-transfer (property-id uint))
+  (let ((transfer (map-get? property-transfers { property-id: property-id })))
+    (if (is-none transfer)
+      err-not-found
+      (let ((transfer-data (unwrap-panic transfer)))
+        (if (and (is-eq (get to transfer-data) tx-sender) (is-eq (get status transfer-data) "pending"))
+          (begin
+            (map-set properties 
+              { property-id: property-id } 
+              { 
+                owner: tx-sender, 
+                details: (get details (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                price: (get price (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                for-sale: (get for-sale (unwrap-panic (map-get? properties { property-id: property-id }))), 
+                registration-date: (get registration-date (unwrap-panic (map-get? properties { property-id: property-id }))) 
+              }
+            )
+            (map-delete property-transfers { property-id: property-id })
+            (ok true)
+          )
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (list-property-for-sale (property-id uint) (asking-price uint))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (and (is-eq tx-sender current-owner) (> asking-price u0))
+          (ok (map-set properties 
+            { property-id: property-id }
+            (merge (unwrap-panic existing-property)
+              {
+                price: asking-price,
+                for-sale: true
+              }
+            )
+          ))
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (remove-property-from-sale (property-id uint))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let ((current-owner (get owner (unwrap-panic existing-property))))
+        (if (is-eq tx-sender current-owner)
+          (ok (map-set properties 
+            { property-id: property-id }
+            (merge (unwrap-panic existing-property)
+              {
+                for-sale: false
+              }
+            )
+          ))
+          err-owner-only
+        )
+      )
+    )
+  )
+)
+
+(define-public (buy-property (property-id uint))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-none existing-property)
+      err-not-found
+      (let (
+        (property-data (unwrap-panic existing-property))
+        (current-owner (get owner property-data))
+        (sale-price (get price property-data))
+        (is-for-sale (get for-sale property-data))
+      )
+        (if (and is-for-sale (not (is-eq tx-sender current-owner)))
+          (begin
+            (map-set property-transfers 
+              { property-id: property-id }
+              {
+                from: current-owner,
+                to: tx-sender,
+                status: "pending",
+                price: sale-price,
+                transfer-date: (get-block-height)
+              }
+            )
+            (ok true)
+          )
+          err-not-for-sale
+        )
+      )
+    )
+  )
+)
+
+(define-public (file-property-dispute 
+    (property-id uint)
+    (description (string-ascii 256))
+  )
+  (let (
+    (dispute-id (get-next-dispute-id property-id))
+    (existing-property (map-get? properties { property-id: property-id }))
+  )
+    (if (is-none existing-property)
+      err-not-found
+      (ok (map-set property-disputes
+        { property-id: property-id, dispute-id: dispute-id }
+        {
+          complainant: tx-sender,
+          description: description,
+          status: "pending",
+          filing-date: (get-block-height),
+          resolution-date: none
+        }
+      ))
+    )
+  )
+)
+
+;; Removed duplicate definition of get-next-dispute-id
+
+(define-private (get-last-dispute-id (property-id uint))
+  (let ((disputes (map-to-list property-disputes)))
+    (fold get-max-dispute-id disputes u0)
+  )
+)
+
+(define-private (get-max-dispute-id (dispute {property-id: uint, dispute-id: uint}) (max-id uint))
+  (if (> (get dispute-id dispute) max-id)
+    (get dispute-id dispute)
+    max-id
+  )
+)
+
+(define-public (resolve-property-dispute
+    (property-id uint)
+    (dispute-id uint)
+  )
+  (let (
+    (existing-dispute (map-get? property-disputes { property-id: property-id, dispute-id: dispute-id }))
+    (is-authorized-resolver (is-eq tx-sender contract-owner))
+  )
+    (if (or (is-none existing-dispute) (not is-authorized-resolver))
+      err-not-found
+      (ok (map-set property-disputes
+        { property-id: property-id, dispute-id: dispute-id }
+        (merge (unwrap-panic existing-dispute)
+          {
+            status: "resolved",
+            resolution-date: (some (get-block-height))
+          }
+        )
+      ))
+    )
+  )
+)
