@@ -57,3 +57,38 @@
     transfer-date: uint
   }
 )
+
+(define-map property-history
+  { property-id: uint, index: uint }
+  {
+    previous-owner: principal,
+    new-owner: principal,
+    transfer-date: uint,
+    price: uint
+  }
+)
+
+;; Private Functions
+(define-private (get-block-height)
+  block-height
+)
+
+
+;; Public Functions
+(define-public (register-property (property-id uint) (details (string-ascii 256)))
+  (let ((existing-property (map-get? properties { property-id: property-id })))
+    (if (is-some existing-property)
+      err-already-registered
+      (ok (map-set properties 
+        { property-id: property-id } 
+        {
+          owner: tx-sender,
+          details: details,
+          price: u0,
+          for-sale: false,
+          registration-date: (get-block-height)
+        }
+      ))
+    )
+  )
+)
